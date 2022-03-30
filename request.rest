@@ -4,6 +4,16 @@ Content-Type: application/json
 {
     "name": "Marcin",
     "surname": "Nowakowski",
-    "email":"tarczus5@gmail.com",
+    "email":"fajnychlopakXD@gmail.com",
     "password":"123"
 }
+
+###
+
+POST http://localhost:4001/user/verifyAccount
+Content-Type: application/json
+
+{
+    "email":"fajnychlopakxd@gmail.com",
+    "code":"888009"
+} 
