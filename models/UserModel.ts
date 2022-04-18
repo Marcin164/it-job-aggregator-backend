@@ -1,8 +1,9 @@
 import { Schema, model } from "mongoose";
-const validator = require("validator")
-const argon2 = require("argon2")
-const uniqueValidator = require('mongoose-unique-validator');
-const nodemailer = require("nodemailer")
+import validator from "validator";
+import argon2 from "argon2";
+import uniqueValidator from 'mongoose-unique-validator';
+import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken"
 const codeGenerator = require('node-code-generator');
 
 const UserSchema: Schema = new Schema({
@@ -19,6 +20,8 @@ const UserSchema: Schema = new Schema({
         unique: true,
         required: [true, "Type in an email"],
         validate: [validator.isEmail, "Invalid email!"],
+        lowercase: true,
+        trim: true
     },
     password: {
         type: String,
@@ -28,6 +31,11 @@ const UserSchema: Schema = new Schema({
     isActive: {
         type: Boolean,
         required: true,
+        default: false
+    },
+    isPreferences: {
+        type: Boolean,
+        required:true,
         default: false
     },
     code: {
@@ -56,14 +64,32 @@ const UserSchema: Schema = new Schema({
         type: [String],
     },
     maxSalary: {
-        type: Number,
+        type: Number
     },
     minSalary: {
-        type: Number,
+        type: Number
     },
 }, { timestamps: true });
 
-UserSchema.statics.register = async function (data) {
+UserSchema.statics.login = async function(data:any) {
+    const user = await this.findOne({email: data.email.toLowerCase()})
+
+    if(!user) throw "Wrong email or password"
+
+    let isMatch = await argon2.verify(user.password, data.password)
+
+    if(!isMatch) throw "Wrong email or password"
+
+    const accessToken = jwt.sign({userId:user.id}, "secretOne", {expiresIn: "15m"})
+    const refreshToken = jwt.sign({userId:user.id}, "secretTwo", {expiresIn: "15m"})
+
+    const isActive = user.isActive
+    const isPreferences = user.isPreferences
+
+    return {accessToken, refreshToken, isActive, isPreferences}
+}
+
+UserSchema.statics.register = async function (data:any) {
     if (!data) throw "Invalid or no data!"
 
     let generator = new codeGenerator();
@@ -98,22 +124,17 @@ UserSchema.statics.register = async function (data) {
         html: `<h1>Welcome ${data.name}, to our Job Aggregator!</h1><p>We are so happy, that you've signed up in our site. WE hope that u will find your dream job here</p><p>Here is your code:<b>${codes[0]}</b></p><p>Type it <a>here</a></p><p>Do not share it with anyone</p><p><h3>Marcin Nowakowski</h3></p>`
     };
 
-
     transporter.sendMail(options, function (err: any, info: any) {
-        if (err) {
-            console.log(err)
-        } else {
-            console.log("Sended!")
-        }
+        if (err) console.log(err)
+        console.log("Sended!")
     })
 
     return "Saved!"
 }
 
-UserSchema.statics.verifyAccount = async function (data) {
+UserSchema.statics.verifyAccount = async function (id:any, data:any) {
     if (!data) throw "Invalid or no data!"
-    console.log(data)
-    const query = { $and: [{ email: data.email }, { code: data.code }] }
+    const query = { $and: [{ _id: id }, { code: data.code }] }
     const update = { isActive: true }
     await this.findOneAndUpdate(query, update)
     .then((result: any) => {
@@ -121,7 +142,27 @@ UserSchema.statics.verifyAccount = async function (data) {
         return true
     })
     .catch((err: any) => {throw err})
+}
 
+UserSchema.statics.setWorkPreferences = async function (id:any, data:any) {
+    if(!data) throw "Invalid or no data!"
+
+    const update = {
+        isRemote: data.isRemote,
+        placeOfWork: data.placeOfWork,
+        favouriteCompany: data.favouriteCompany,
+        levelOfExperience: data.levelOfExperience,
+        typeOfEmployment: data.typeOfEmployment,
+        fieldOfProgramming: data.fieldOfProgramming,
+        maxSalary: data.maxSalary,
+        minSalary: data.minSalary
+    }
+
+    this.findByIdAndUpdate(id, update)
+    .then((result: any) => {
+        return "Saved!"
+    })
+    .catch((err: any) => {throw err})
 }
 
 UserSchema.plugin(uniqueValidator, { message: "Email already in use" })
