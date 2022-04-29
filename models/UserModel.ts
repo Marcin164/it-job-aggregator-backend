@@ -26,7 +26,8 @@ const UserSchema: Schema = new Schema({
     password: {
         type: String,
         required: [true, "Type in a password"],
-        minlength: [3, "Minimum password length is 6 characters!"]
+        minlength: [8, "Minimum password length is 6 characters!"],
+        validate: [validator.isStrongPassword, "Invalid password!"]
     },
     isActive: {
         type: Boolean,
@@ -43,31 +44,48 @@ const UserSchema: Schema = new Schema({
     },
     isRemote: {
         type: String,
+        required: [true, "Type in a password"],
         enum: ["Yes", "No", "Doesn't matter"],
+        default: "No"
     },
     placeOfWork: {
         type: [String],
+        required: [true, "Select place of work"],
     },
     favouriteCompany: {
         type: [String],
+        required: [true, "Select favourite companies"],
+        default: []
     },
     levelOfExperience: {
         type: [String],
+        required: [true, "Select experience"],
+        default: []
     },
     typeOfEmployment: {
         type: [String],
+        required: [true, "Select type of employment"],
+        default: []
     },
     fieldOfProgramming: {
         type: [String],
+        required: [true, "Select field of programming"],
+        default: []
     },
     skills: {
         type: [String],
+        required: [true, "Select skills"],
+        default: []
     },
     maxSalary: {
-        type: Number
+        type: Number,
+        required: [true, "Select maximal salary"],
+        default: 0
     },
     minSalary: {
-        type: Number
+        type: Number,
+        required: [true, "Select minimal salary"],
+        default: 0
     },
 }, { timestamps: true });
 
@@ -80,8 +98,8 @@ UserSchema.statics.login = async function(data:any) {
 
     if(!isMatch) throw "Wrong email or password"
 
-    const accessToken = jwt.sign({userId:user.id}, "secretOne", {expiresIn: "15m"})
-    const refreshToken = jwt.sign({userId:user.id}, "secretTwo", {expiresIn: "15m"})
+    const accessToken = jwt.sign({userId:user.id}, "secretOne", {expiresIn: "15s"})
+    const refreshToken = jwt.sign({userId:user.id}, "secretTwo")
 
     const isActive = user.isActive
     const isPreferences = user.isPreferences
@@ -102,6 +120,8 @@ UserSchema.statics.register = async function (data:any) {
             pass: process.env.EMAIL_PASS
         }
     })
+
+    if(validator.isStrongPassword(data.password)) throw "Password is not strong enough!"
 
     const user = new this({
         name: data.name,
@@ -132,9 +152,10 @@ UserSchema.statics.register = async function (data:any) {
     return "Saved!"
 }
 
-UserSchema.statics.verifyAccount = async function (id:any, data:any) {
+UserSchema.statics.verifyAccount = async function (data:any) {
     if (!data) throw "Invalid or no data!"
-    const query = { $and: [{ _id: id }, { code: data.code }] }
+    console.log(data)
+    const query = { $and: [{ email: data.email }, { code: data.code }] }
     const update = { isActive: true }
     await this.findOneAndUpdate(query, update)
     .then((result: any) => {
@@ -146,6 +167,25 @@ UserSchema.statics.verifyAccount = async function (id:any, data:any) {
 
 UserSchema.statics.setWorkPreferences = async function (id:any, data:any) {
     if(!data) throw "Invalid or no data!"
+
+    let arrays = {
+        placeOfWork: data.placeOfWork,
+        favouriteCompany: data.favouriteCompany,
+        levelOfExperience: data.levelOfExperience,
+        typeOfEmployment: data.typeOfEmployment,
+        fieldOfProgramming: data.fieldOfProgramming
+    }
+
+    for (const [key, value] of Object.entries(arrays)) {
+        let title = key.replace(/([A-Z])/g, ' $1').trim().toLowerCase()
+        if(value.length === 0) throw `${title} must have at least one choice!`
+    }
+
+    if(data.maxSalary !== undefined || data.minSalary !== undefined){
+        if(data.minSalary > data.maxSalary) throw "Maximal salary must be greater, than minimal"
+    }else throw "Type in salary!"
+
+    if(data.isRemote === undefined) throw "There is something wrong with rmeote option"
 
     const update = {
         isRemote: data.isRemote,
@@ -159,7 +199,24 @@ UserSchema.statics.setWorkPreferences = async function (id:any, data:any) {
     }
 
     this.findByIdAndUpdate(id, update)
-    .then((result: any) => {
+    .then(() => {
+        return "Saved!"
+    })
+    .catch((err: any) => {throw err})
+}
+
+UserSchema.statics.setSkillsPreferences = async function (id:any, data:any){
+    if(!data) throw "Invalid or no data!"
+
+    if(data.skills === 0) throw "Set some skills!"
+
+    const update = {
+        skills: data.skills,
+        isPreferences:true
+    }
+
+    this.findByIdAndUpdate(id, update)
+    .then(() => {
         return "Saved!"
     })
     .catch((err: any) => {throw err})

@@ -17,7 +17,7 @@ JobPostSchema.statics.fetchAllByPreferences = () => {
 }
 
 const JobPostModel = model(
-    "JobPosts",
+    "posts",
     JobPostSchema
   )
   
